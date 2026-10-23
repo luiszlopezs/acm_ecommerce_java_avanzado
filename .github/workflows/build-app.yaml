@@ -48,9 +48,52 @@ jobs:
       - run: chmod +x gradlew
       - run: ./gradlew test
 
+  # busca vulnerabilidades en el codigo java
+  codeql:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write   # para subir los resultados a Security
+    steps:
+      - uses: actions/checkout@v4
+      # preparo codeql para java
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: none     # no compila, solo lee el codigo
+      # corro el analisis
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:java-kotlin"
+
+  # escanea la imagen docker antes de subirla
+  trivy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: chmod +x gradlew
+      # genero el jar que usa el dockerfile
+      - run: ./gradlew bootJar -x test
+      # construyo la imagen solo para escanearla
+      - run: docker build -t app:scan .
+      - name: Escanear imagen
+        run: |
+          # muestra las vulnerabilidades altas y criticas
+          # exit-code 0 para que no falle el pipeline
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 app:scan
+
   # job de la img de docker
   docker:
-    needs: test
+    # espera a las pruebas, codeql y trivy
+    needs: [test, codeql, trivy]
     runs-on: ubuntu-latest
     permissions:
       contents: read
