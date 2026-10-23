@@ -68,10 +68,17 @@ jobs:
       - name: Login en GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Nombre de la imagen en minúsculas
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+      - name: Preparar nombre y tag
+        run: |
+          # nombre en minusculas
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+          # tag con los primeros 7 del sha
+          SHA=${{ github.event.pull_request.head.sha }}
+          echo "SHA_SHORT=${SHA:0:7}" >> $GITHUB_ENV
 
       - name: Construir y publicar
         run: |
-          docker build -t $IMAGE:latest .
-          docker push $IMAGE:latest
+          # la imagen con dos tags
+          docker build -t $IMAGE:latest -t $IMAGE:$SHA_SHORT .
+          # subo todos los tags
+          docker push --all-tags $IMAGE
